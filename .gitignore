@@ -1,0 +1,8 @@
+# vscode settings
+.vscode/
+
+# build files
+build/
+
+# ROM files
+roms/
