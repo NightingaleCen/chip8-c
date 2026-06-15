@@ -35,6 +35,9 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
   load_rom(ctx->memory, argv[1]);
   ctx->PC = 0x200;
 
+  /*Set up random number seed*/
+  srand((unsigned)time(NULL));
+
   /*Create the window*/
   if (!SDL_CreateWindowAndRenderer("CHIP-8", DISPLAY_WIDTH * DISPLAY_PIXEL_SIZE,
                                    DISPLAY_HEIGHT * DISPLAY_PIXEL_SIZE,

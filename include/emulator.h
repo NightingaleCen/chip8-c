@@ -50,6 +50,8 @@ typedef enum InstructionType {
   RIGHT_SHIFT_VX,
   LEFT_SHIFT_VY,
   SET_I,
+  JUMP_WITH_OFFSET,
+  RANDOM,
   DISPLAY,
   UNIDENTIFIED,
 } InstructionType;

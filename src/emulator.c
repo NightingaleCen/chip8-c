@@ -122,9 +122,18 @@ DecodedInstruction decode_instruction(uint16_t instruction) {
     instruction_type = SET_I;
     break;
 
+  case 0xb:
+    instruction_type = JUMP_WITH_OFFSET;
+    break;
+
+  case 0xc:
+    instruction_type = RANDOM;
+    break;
+
   case 0xd:
     instruction_type = DISPLAY;
     break;
+
   default:
     instruction_type = UNIDENTIFIED;
     break;
@@ -321,6 +330,20 @@ static ExecuteResult exec_left_shift_vx(AppState *ctx,
 
 static ExecuteResult exec_set_I(AppState *ctx, DecodedInstruction data) {
   ctx->registers->I = data.NNN;
+  return EXEC_SUCCESS;
+}
+
+// TODO: Configurable
+static ExecuteResult exec_jump_with_offset(AppState *ctx,
+                                           DecodedInstruction data) {
+  ctx->registers->I = data.NNN + ctx->registers->VX[0x0];
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_random_number(AppState *ctx,
+                                        DecodedInstruction data) {
+  uint8_t random_number = (uint8_t)(rand() & 0xff);
+  ctx->registers->VX[data.X] = random_number & data.NN;
   return EXEC_SUCCESS;
 }
 
