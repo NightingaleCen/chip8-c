@@ -16,6 +16,7 @@ DecodedInstruction decode_instruction(uint16_t instruction) {
   uint16_t N = instruction & INS_MASK_N;
   uint16_t NN = instruction & INS_MASK_NN;
   uint16_t NNN = instruction & INS_MASK_NNN;
+  uint16_t residual = instruction & INS_MASK_RESIDUAL;
 
   InstructionType instruction_type;
 
@@ -25,7 +26,9 @@ DecodedInstruction decode_instruction(uint16_t instruction) {
     case 0x00E0:
       instruction_type = CLEAR_SCREEN;
       break;
-
+    case 0x00EE:
+      instruction_type = SUBROUTINE_RETURN;
+      break;
     default:
       instruction_type = UNIDENTIFIED;
       break;
@@ -36,12 +39,83 @@ DecodedInstruction decode_instruction(uint16_t instruction) {
     instruction_type = JUMP;
     break;
 
+  case 0x2:
+    instruction_type = SUBROUTINE_CALL;
+    break;
+
+  case 0x3:
+    instruction_type = SKIP_IF_VX;
+    break;
+
+  case 0x4:
+    instruction_type = SKIP_IF_NOT_VX;
+    break;
+
+  case 0x5:
+    switch (residual) {
+    case 0x0:
+      instruction_type = SKIP_IF_EQUAL;
+      break;
+
+    default:
+      instruction_type = UNIDENTIFIED;
+      break;
+    }
+    break;
+
   case 0x6:
     instruction_type = SET_VX;
     break;
 
   case 0x7:
     instruction_type = ADD_TO_VX;
+    break;
+
+  case 0x8: // Logical and arithmetic
+    switch (residual) {
+    case 0x0:
+      instruction_type = SET_VX_VY;
+      break;
+    case 0x1:
+      instruction_type = OR_VX_VY;
+      break;
+    case 0x2:
+      instruction_type = AND_VX_VY;
+      break;
+    case 0x3:
+      instruction_type = XOR_VX_VY;
+      break;
+    case 0x4:
+      instruction_type = ADD_VX_VY;
+      break;
+    case 0x5:
+      instruction_type = SUB_VX_VY;
+      break;
+    case 0x7:
+      instruction_type = SUB_VY_VX;
+      break;
+    case 0x6:
+      instruction_type = RIGHT_SHIFT_VX;
+      break;
+    case 0xe:
+      instruction_type = LEFT_SHIFT_VY;
+      break;
+    default:
+      instruction_type = UNIDENTIFIED;
+      break;
+    }
+    break;
+
+  case 0x9:
+    switch (residual) {
+    case 0:
+      instruction_type = SKIP_IF_NOT_EQUAL;
+      break;
+
+    default:
+      instruction_type = UNIDENTIFIED;
+      break;
+    }
     break;
 
   case 0xa:
@@ -79,8 +153,54 @@ static ExecuteResult exec_clear_screen(AppState *ctx, DecodedInstruction data) {
   return EXEC_SUCCESS;
 }
 
+static ExecuteResult exec_call_subroutine(AppState *ctx,
+                                          DecodedInstruction data) {
+  push_stack(ctx->stack, ctx->PC);
+  ctx->PC = data.NNN;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_return_from_subroutine(AppState *ctx,
+                                                 DecodedInstruction data) {
+  (void)data; // unused
+  uint16_t last_address = pop_stack(ctx->stack);
+  ctx->PC = last_address;
+  return EXEC_SUCCESS;
+}
+
 static ExecuteResult exec_jump(AppState *ctx, DecodedInstruction data) {
   ctx->PC = data.NNN; // Stays in place, no need for -= 2
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_skip_if_vx(AppState *ctx, DecodedInstruction data) {
+  if (ctx->registers->VX[data.X] == data.NN) {
+    ctx->PC += 2;
+  }
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_skip_if_not_vx(AppState *ctx,
+                                         DecodedInstruction data) {
+  if (ctx->registers->VX[data.X] != data.NN) {
+    ctx->PC += 2;
+  }
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_skip_if_equal(AppState *ctx,
+                                        DecodedInstruction data) {
+  if (ctx->registers->VX[data.X] == ctx->registers->VX[data.Y]) {
+    ctx->PC += 2;
+  }
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_skip_if_not_equal(AppState *ctx,
+                                            DecodedInstruction data) {
+  if (ctx->registers->VX[data.X] != ctx->registers->VX[data.Y]) {
+    ctx->PC += 2;
+  }
   return EXEC_SUCCESS;
 }
 
@@ -101,6 +221,101 @@ static ExecuteResult exec_add_to_vx(AppState *ctx, DecodedInstruction data) {
   }
 
   ctx->registers->VX[X] = result;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_set_vx_to_vy(AppState *ctx, DecodedInstruction data) {
+  ctx->registers->VX[data.X] = ctx->registers->VX[data.Y];
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_vx_or_vy(AppState *ctx, DecodedInstruction data) {
+  uint8_t VX, VY;
+  VX = ctx->registers->VX[data.X];
+  VY = ctx->registers->VX[data.Y];
+  ctx->registers->VX[data.X] = VX | VY;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_vx_and_vy(AppState *ctx, DecodedInstruction data) {
+  uint8_t VX, VY;
+  VX = ctx->registers->VX[data.X];
+  VY = ctx->registers->VX[data.Y];
+  ctx->registers->VX[data.X] = VX & VY;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_vx_xor_vy(AppState *ctx, DecodedInstruction data) {
+  uint8_t VX, VY;
+  VX = ctx->registers->VX[data.X];
+  VY = ctx->registers->VX[data.Y];
+  ctx->registers->VX[data.X] = VX ^ VY;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_vx_add_vy(AppState *ctx, DecodedInstruction data) {
+  uint8_t VX, VY, sum;
+  VX = ctx->registers->VX[data.X];
+  VY = ctx->registers->VX[data.Y];
+  sum = VX + VY;
+
+  if (sum < VX) {
+    ctx->registers->VX[0xF] = 1; // Overflow
+  } else {
+    ctx->registers->VX[0xF] = 0;
+  }
+  ctx->registers->VX[data.X] = sum;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_vx_sub_vy(AppState *ctx, DecodedInstruction data) {
+  uint8_t VX, VY, sub;
+  VX = ctx->registers->VX[data.X];
+  VY = ctx->registers->VX[data.Y];
+  sub = VX - VY;
+
+  if (VX < VY) {
+    ctx->registers->VX[0xF] = 0; // Underflow
+  } else {
+    ctx->registers->VX[0xF] = 1;
+  }
+  ctx->registers->VX[data.X] = sub;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_vy_sub_vx(AppState *ctx, DecodedInstruction data) {
+  uint8_t VX, VY, sub;
+  VX = ctx->registers->VX[data.X];
+  VY = ctx->registers->VX[data.Y];
+  sub = VY - VX;
+
+  if (VY < VX) {
+    ctx->registers->VX[0xF] = 0; // Underflow
+  } else {
+    ctx->registers->VX[0xF] = 1;
+  }
+  ctx->registers->VX[data.X] = sub;
+  return EXEC_SUCCESS;
+}
+
+// TODO: Configurable
+static ExecuteResult exec_right_shift_vx(AppState *ctx,
+                                         DecodedInstruction data) {
+  uint8_t VX;
+  VX = ctx->registers->VX[data.X];
+  ctx->registers->VX[0xF] = VX & 1;
+  ctx->registers->VX[data.X] = VX >> 1;
+
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_left_shift_vx(AppState *ctx,
+                                        DecodedInstruction data) {
+  uint8_t VX;
+  VX = ctx->registers->VX[data.X];
+  ctx->registers->VX[0xF] = (VX >> 7) & 1;
+  ctx->registers->VX[data.X] = VX << 1;
+
   return EXEC_SUCCESS;
 }
 
@@ -167,8 +382,23 @@ static ExecuteResult exec_unidentified(AppState *ctx, DecodedInstruction data) {
 static ExecFunc func_table[UNIDENTIFIED] = {
     [CLEAR_SCREEN] = exec_clear_screen,
     [JUMP] = exec_jump,
+    [SUBROUTINE_CALL] = exec_call_subroutine,
+    [SUBROUTINE_RETURN] = exec_return_from_subroutine,
+    [SKIP_IF_VX] = exec_skip_if_vx,
+    [SKIP_IF_NOT_VX] = exec_skip_if_not_vx,
+    [SKIP_IF_EQUAL] = exec_skip_if_equal,
+    [SKIP_IF_NOT_EQUAL] = exec_skip_if_not_equal,
     [SET_VX] = exec_set_vx,
     [ADD_TO_VX] = exec_add_to_vx,
+    [SET_VX_VY] = exec_set_vx_to_vy,
+    [OR_VX_VY] = exec_vx_or_vy,
+    [AND_VX_VY] = exec_vx_and_vy,
+    [XOR_VX_VY] = exec_vx_xor_vy,
+    [ADD_VX_VY] = exec_vx_add_vy,
+    [SUB_VX_VY] = exec_vx_sub_vy,
+    [SUB_VY_VX] = exec_vy_sub_vx,
+    [RIGHT_SHIFT_VX] = exec_right_shift_vx,
+    [LEFT_SHIFT_VY] = exec_left_shift_vx,
     [SET_I] = exec_set_I,
     [DISPLAY] = exec_display,
 };
