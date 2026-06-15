@@ -84,7 +84,7 @@ void SDL_AppQuit(void *appstate, SDL_AppResult result) {
   if (ctx != NULL) {
 
     SDL_DestroyWindow(ctx->window);
-    destory_display(ctx->display);
+    destroy_display(ctx->display);
 
     stop_timer(ctx->sound_timer);
     stop_timer(ctx->delay_timer);

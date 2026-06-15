@@ -39,7 +39,7 @@ typedef struct Timer {
 Display *init_display(void);
 void clear_display(Display *display);
 void render_display_once(Display *display);
-void destory_display(Display *display);
+void destroy_display(Display *display);
 
 /*-----------Timer-----------*/
 

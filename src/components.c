@@ -76,7 +76,7 @@ void render_display_once(Display *display) {
   SDL_RenderPresent(display->renderer);
 }
 
-void destory_display(Display *display) {
+void destroy_display(Display *display) {
   SDL_DestroyRenderer(display->renderer);
   free(display->display_buffer);
   free(display);
