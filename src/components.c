@@ -143,3 +143,92 @@ void stop_timer(Timer *timer) {
   pthread_join(timer->thread, NULL);
   pthread_mutex_destroy(&(timer->mutex));
 }
+
+/*---------Keyboard----------*/
+
+bool is_key_pressed(Keys key) {
+  const bool *key_states = SDL_GetKeyboardState(NULL);
+  SDL_Scancode scancode = key_to_scancode(key);
+  if (scancode == SDL_SCANCODE_UNKNOWN) {
+    PANIC("Unknown key detected in is_key_pressed!");
+  }
+  return key_states[scancode];
+}
+
+SDL_Scancode key_to_scancode(Keys key) {
+  switch (key) {
+  case KEY_0:
+    return SDL_SCANCODE_X;
+  case KEY_1:
+    return SDL_SCANCODE_1;
+  case KEY_2:
+    return SDL_SCANCODE_2;
+  case KEY_3:
+    return SDL_SCANCODE_3;
+  case KEY_4:
+    return SDL_SCANCODE_Q;
+  case KEY_5:
+    return SDL_SCANCODE_W;
+  case KEY_6:
+    return SDL_SCANCODE_E;
+  case KEY_7:
+    return SDL_SCANCODE_A;
+  case KEY_8:
+    return SDL_SCANCODE_S;
+  case KEY_9:
+    return SDL_SCANCODE_D;
+  case KEY_A:
+    return SDL_SCANCODE_Z;
+  case KEY_B:
+    return SDL_SCANCODE_C;
+  case KEY_C:
+    return SDL_SCANCODE_4;
+  case KEY_D:
+    return SDL_SCANCODE_R;
+  case KEY_E:
+    return SDL_SCANCODE_F;
+  case KEY_F:
+    return SDL_SCANCODE_V;
+  default:
+    return SDL_SCANCODE_UNKNOWN;
+  }
+}
+
+Keys scancode_to_key(SDL_Scancode scancode) {
+  switch (scancode) {
+  case SDL_SCANCODE_X:
+    return KEY_0;
+  case SDL_SCANCODE_1:
+    return KEY_1;
+  case SDL_SCANCODE_2:
+    return KEY_2;
+  case SDL_SCANCODE_3:
+    return KEY_3;
+  case SDL_SCANCODE_Q:
+    return KEY_4;
+  case SDL_SCANCODE_W:
+    return KEY_5;
+  case SDL_SCANCODE_E:
+    return KEY_6;
+  case SDL_SCANCODE_A:
+    return KEY_7;
+  case SDL_SCANCODE_S:
+    return KEY_8;
+  case SDL_SCANCODE_D:
+    return KEY_9;
+  case SDL_SCANCODE_Z:
+    return KEY_A;
+  case SDL_SCANCODE_C:
+    return KEY_B;
+  case SDL_SCANCODE_4:
+    return KEY_C;
+  case SDL_SCANCODE_R:
+    return KEY_D;
+  case SDL_SCANCODE_F:
+    return KEY_E;
+  case SDL_SCANCODE_V:
+    return KEY_F;
+  default:
+    return KEY_UNKNOWN;
+  }
+}

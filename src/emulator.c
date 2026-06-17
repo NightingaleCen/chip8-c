@@ -1,6 +1,7 @@
 #include "emulator.h"
 #include "utils.h"
 
+#include <pthread.h>
 #include <stdlib.h>
 
 uint16_t fetch_instruction(AppState *ctx) {
@@ -134,6 +135,55 @@ DecodedInstruction decode_instruction(uint16_t instruction) {
     instruction_type = DISPLAY;
     break;
 
+  case 0xe:
+    switch (NN) {
+    case 0x9e:
+      instruction_type = SKIP_IF_KEY_PRESSED;
+      break;
+    case 0xa1:
+      instruction_type = SKIP_IF_KEY_NOT_PRESSED;
+      break;
+    default:
+      instruction_type = UNIDENTIFIED;
+      break;
+    }
+    break;
+
+  case 0xf:
+    switch (NN) {
+    case 0x07:
+      instruction_type = SET_VX_TIMER;
+      break;
+    case 0x15:
+      instruction_type = SET_DELAY_TIMER;
+      break;
+    case 0x18:
+      instruction_type = SET_SOUND_TIMER;
+      break;
+    case 0x1e:
+      instruction_type = ADD_TO_I;
+      break;
+    case 0x0a:
+      instruction_type = GET_KEY;
+      break;
+    case 0x29:
+      instruction_type = INDEX_FONT;
+      break;
+    case 0x33:
+      instruction_type = DEMICAL_CONVERSION;
+      break;
+    case 0x55:
+      instruction_type = STORE_MEMORY;
+      break;
+    case 0x65:
+      instruction_type = LOAD_MEMORY;
+      break;
+    default:
+      instruction_type = UNIDENTIFIED;
+      break;
+    }
+    break;
+
   default:
     instruction_type = UNIDENTIFIED;
     break;
@@ -222,12 +272,12 @@ static ExecuteResult exec_add_to_vx(AppState *ctx, DecodedInstruction data) {
   uint16_t X = data.X;
   uint16_t NN = data.NN;
 
-  // detect overflow
+  // overflow is ignored for this instruction
   uint8_t result = ctx->registers->VX[X] + NN;
-  if (result < NN) {
-    PANIC(
-        "Number overflow when ADD_TO_VX"); // TODO: use Execute Result & context
-  }
+  // if (result < NN) {
+  //   PANIC(
+  //       "Number overflow when ADD_TO_VX");
+  // }
 
   ctx->registers->VX[X] = result;
   return EXEC_SUCCESS;
@@ -267,13 +317,14 @@ static ExecuteResult exec_vx_add_vy(AppState *ctx, DecodedInstruction data) {
   VX = ctx->registers->VX[data.X];
   VY = ctx->registers->VX[data.Y];
   sum = VX + VY;
+  ctx->registers->VX[data.X] = sum;
 
   if (sum < VX) {
     ctx->registers->VX[0xF] = 1; // Overflow
   } else {
     ctx->registers->VX[0xF] = 0;
   }
-  ctx->registers->VX[data.X] = sum;
+
   return EXEC_SUCCESS;
 }
 
@@ -282,13 +333,14 @@ static ExecuteResult exec_vx_sub_vy(AppState *ctx, DecodedInstruction data) {
   VX = ctx->registers->VX[data.X];
   VY = ctx->registers->VX[data.Y];
   sub = VX - VY;
+  ctx->registers->VX[data.X] = sub;
 
   if (VX < VY) {
     ctx->registers->VX[0xF] = 0; // Underflow
   } else {
     ctx->registers->VX[0xF] = 1;
   }
-  ctx->registers->VX[data.X] = sub;
+
   return EXEC_SUCCESS;
 }
 
@@ -297,13 +349,14 @@ static ExecuteResult exec_vy_sub_vx(AppState *ctx, DecodedInstruction data) {
   VX = ctx->registers->VX[data.X];
   VY = ctx->registers->VX[data.Y];
   sub = VY - VX;
+  ctx->registers->VX[data.X] = sub;
 
   if (VY < VX) {
     ctx->registers->VX[0xF] = 0; // Underflow
   } else {
     ctx->registers->VX[0xF] = 1;
   }
-  ctx->registers->VX[data.X] = sub;
+
   return EXEC_SUCCESS;
 }
 
@@ -312,8 +365,8 @@ static ExecuteResult exec_right_shift_vx(AppState *ctx,
                                          DecodedInstruction data) {
   uint8_t VX;
   VX = ctx->registers->VX[data.X];
-  ctx->registers->VX[0xF] = VX & 1;
   ctx->registers->VX[data.X] = VX >> 1;
+  ctx->registers->VX[0xF] = VX & 1;
 
   return EXEC_SUCCESS;
 }
@@ -322,8 +375,8 @@ static ExecuteResult exec_left_shift_vx(AppState *ctx,
                                         DecodedInstruction data) {
   uint8_t VX;
   VX = ctx->registers->VX[data.X];
-  ctx->registers->VX[0xF] = (VX >> 7) & 1;
   ctx->registers->VX[data.X] = VX << 1;
+  ctx->registers->VX[0xF] = (VX >> 7) & 1;
 
   return EXEC_SUCCESS;
 }
@@ -394,6 +447,110 @@ static ExecuteResult exec_display(AppState *ctx, DecodedInstruction data) {
   return EXEC_SUCCESS;
 }
 
+static ExecuteResult exec_skip_if_key_pressed(AppState *ctx,
+                                              DecodedInstruction data) {
+  uint8_t key = ctx->registers->VX[data.X];
+  if (key > 0xF) {
+    PANIC("Invalid key value stored in V%d!", data.X);
+  }
+  if (is_key_pressed(key)) {
+    ctx->PC += 2;
+  }
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_skip_if_key_not_pressed(AppState *ctx,
+                                                  DecodedInstruction data) {
+  uint8_t key = ctx->registers->VX[data.X];
+  if (key > 0xF) {
+    PANIC("Invalid key value stored in V%d!", data.X);
+  }
+  if (!is_key_pressed(key)) {
+    ctx->PC += 2;
+  }
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_set_vx_timer(AppState *ctx, DecodedInstruction data) {
+  ctx->registers->VX[data.X] = ctx->delay_timer->t;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_set_delay_timer(AppState *ctx,
+                                          DecodedInstruction data) {
+  pthread_mutex_lock(&(ctx->delay_timer->mutex));
+  ctx->delay_timer->t = ctx->registers->VX[data.X];
+  pthread_mutex_unlock(&(ctx->delay_timer->mutex));
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_set_sound_timer(AppState *ctx,
+                                          DecodedInstruction data) {
+  pthread_mutex_lock(&(ctx->sound_timer->mutex));
+  ctx->sound_timer->t = ctx->registers->VX[data.X];
+  pthread_mutex_unlock(&(ctx->sound_timer->mutex));
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_add_to_I(AppState *ctx, DecodedInstruction data) {
+  uint16_t I = ctx->registers->I;
+  uint16_t VX = ctx->registers->VX[data.X];
+  uint16_t sum = I + VX;
+
+  if (sum > 0xFFF) {
+    sum = sum % 0x1000; // wrap around if overflow, since I is only 12 bits
+    ctx->registers->VX[0xF] = 1; // Set VF to 1 if overflow
+  }
+
+  ctx->registers->I = sum;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_get_key(AppState *ctx, DecodedInstruction data) {
+  // TODO: a better way to do this may be SDL event handling
+  for (uint8_t key = 0; key <= 0xF; key++) {
+    if (is_key_pressed(key)) {
+      ctx->registers->VX[data.X] = key;
+      return EXEC_SUCCESS;
+    }
+  }
+  // No key pressed, repeat this instruction
+  ctx->PC -= 2;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_index_font(AppState *ctx, DecodedInstruction data) {
+  if (ctx->registers->VX[data.X] > 0xF) {
+    PANIC("Invalid font character value stored in V%d: 0x%x", data.X,
+          ctx->registers->VX[data.X]);
+  }
+  ctx->registers->I = FONT_OFFSET + (ctx->registers->VX[data.X] * 5);
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_demical_conversion(AppState *ctx,
+                                             DecodedInstruction data) {
+  uint8_t value = ctx->registers->VX[data.X];
+  ctx->memory[ctx->registers->I] = value / 100;
+  ctx->memory[ctx->registers->I + 1] = (value / 10) % 10;
+  ctx->memory[ctx->registers->I + 2] = value % 10;
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_store_memory(AppState *ctx, DecodedInstruction data) {
+  for (uint16_t i = 0; i <= data.X; i++) {
+    ctx->memory[ctx->registers->I + i] = ctx->registers->VX[i];
+  }
+  return EXEC_SUCCESS;
+}
+
+static ExecuteResult exec_load_memory(AppState *ctx, DecodedInstruction data) {
+  for (uint16_t i = 0; i <= data.X; i++) {
+    ctx->registers->VX[i] = ctx->memory[ctx->registers->I + i];
+  }
+  return EXEC_SUCCESS;
+}
+
 static ExecuteResult exec_unidentified(AppState *ctx, DecodedInstruction data) {
   (void)ctx;
   (void)data;
@@ -423,7 +580,20 @@ static ExecFunc func_table[UNIDENTIFIED] = {
     [RIGHT_SHIFT_VX] = exec_right_shift_vx,
     [LEFT_SHIFT_VY] = exec_left_shift_vx,
     [SET_I] = exec_set_I,
+    [JUMP_WITH_OFFSET] = exec_jump_with_offset,
+    [RANDOM] = exec_random_number,
     [DISPLAY] = exec_display,
+    [SKIP_IF_KEY_PRESSED] = exec_skip_if_key_pressed,
+    [SKIP_IF_KEY_NOT_PRESSED] = exec_skip_if_key_not_pressed,
+    [SET_VX_TIMER] = exec_set_vx_timer,
+    [SET_DELAY_TIMER] = exec_set_delay_timer,
+    [SET_SOUND_TIMER] = exec_set_sound_timer,
+    [ADD_TO_I] = exec_add_to_I,
+    [GET_KEY] = exec_get_key,
+    [INDEX_FONT] = exec_index_font,
+    [DEMICAL_CONVERSION] = exec_demical_conversion,
+    [STORE_MEMORY] = exec_store_memory,
+    [LOAD_MEMORY] = exec_load_memory,
 };
 
 void exec_instruction(AppState *ctx, DecodedInstruction decoded_instruction) {

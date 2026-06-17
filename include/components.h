@@ -34,6 +34,26 @@ typedef struct Timer {
   pthread_t thread;
 } Timer;
 
+typedef enum Keys {
+  KEY_0 = 0x0,
+  KEY_1 = 0x1,
+  KEY_2 = 0x2,
+  KEY_3 = 0x3,
+  KEY_4 = 0x4,
+  KEY_5 = 0x5,
+  KEY_6 = 0x6,
+  KEY_7 = 0x7,
+  KEY_8 = 0x8,
+  KEY_9 = 0x9,
+  KEY_A = 0xA,
+  KEY_B = 0xB,
+  KEY_C = 0xC,
+  KEY_D = 0xD,
+  KEY_E = 0xE,
+  KEY_F = 0xF,
+  KEY_UNKNOWN = 0xFF,
+} Keys;
+
 /*----------Display----------*/
 
 Display *init_display(void);
@@ -48,6 +68,8 @@ void *update_timer(void *arg);
 void stop_timer(Timer *timer);
 
 /*---------Keyboard----------*/
-// TODO
+bool is_key_pressed(Keys key);
+SDL_Scancode key_to_scancode(Keys key);
+Keys scancode_to_key(SDL_Scancode scancode);
 
 #endif // COMPONENT_H
