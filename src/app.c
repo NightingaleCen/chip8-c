@@ -35,6 +35,12 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
   load_rom(ctx->memory, argv[1]);
   ctx->PC = 0x200;
 
+  ctx->waiting_for_key = false;
+  ctx->has_pending_key = false;
+  ctx->pending_key = KEY_UNKNOWN;
+  ctx->result_ready = false;
+  ctx->result_key = KEY_UNKNOWN;
+
   /*Set up random number seed*/
   srand((unsigned)time(NULL));
 
@@ -53,12 +59,32 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 }
 
 SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
-  (void)appstate;
+  AppState *ctx = appstate;
+
   if ((event->type == SDL_EVENT_KEY_DOWN &&
        event->key.scancode == SDL_SCANCODE_ESCAPE) ||
       event->type == SDL_EVENT_QUIT) {
     return SDL_APP_SUCCESS; /* end the program, reporting success to the OS. */
   }
+
+  // Only capture keys while an Fx0A instruction is actively waiting.
+  if (ctx->waiting_for_key && event->type == SDL_EVENT_KEY_DOWN &&
+      event->key.repeat == 0 && !ctx->has_pending_key) {
+    Keys key = scancode_to_key(event->key.scancode);
+    if (key != KEY_UNKNOWN) {
+      ctx->pending_key = key;
+      ctx->has_pending_key = true;
+    }
+  } else if (ctx->waiting_for_key && ctx->has_pending_key &&
+             event->type == SDL_EVENT_KEY_UP &&
+             event->key.scancode == key_to_scancode(ctx->pending_key)) {
+    // The first pressed key has been released: complete the cycle.
+    ctx->result_key = ctx->pending_key;
+    ctx->result_ready = true;
+    ctx->has_pending_key = false;
+    ctx->pending_key = KEY_UNKNOWN;
+  }
+
   return SDL_APP_CONTINUE;
 }
 

@@ -27,6 +27,13 @@ typedef struct AppState {
   SDL_Window *window;
   uint16_t PC;
   // TODO: add a context member for error messages etc.
+
+  // States for the Fx0A "wait for key" instruction.
+  bool waiting_for_key;
+  bool has_pending_key;
+  Keys pending_key;
+  bool result_ready;
+  Keys result_key;
 } AppState;
 
 typedef enum InstructionType {

@@ -507,14 +507,23 @@ static ExecuteResult exec_add_to_I(AppState *ctx, DecodedInstruction data) {
 }
 
 static ExecuteResult exec_get_key(AppState *ctx, DecodedInstruction data) {
-  // TODO: a better way to do this may be SDL event handling
-  for (uint8_t key = 0; key <= 0xF; key++) {
-    if (is_key_pressed(key)) {
-      ctx->registers->VX[data.X] = key;
-      return EXEC_SUCCESS;
-    }
+  if (!ctx->waiting_for_key) {
+    ctx->waiting_for_key = true;
+    ctx->has_pending_key = false;
+    ctx->pending_key = KEY_UNKNOWN;
+    ctx->result_ready = false;
+    ctx->result_key = KEY_UNKNOWN;
   }
-  // No key pressed, repeat this instruction
+
+  if (ctx->result_ready) {
+    ctx->registers->VX[data.X] = ctx->result_key;
+    ctx->waiting_for_key = false;
+    ctx->result_ready = false;
+    ctx->result_key = KEY_UNKNOWN;
+    return EXEC_SUCCESS;
+  }
+
+  // No completed key yet; re-execute this instruction next tick.
   ctx->PC -= 2;
   return EXEC_SUCCESS;
 }
