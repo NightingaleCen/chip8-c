@@ -169,6 +169,9 @@ void *update_timer(void *arg) {
     } else if (timer->t > 0xff) {
       // this might happen since we use uint_fast8_t for timer_t
       PANIC("Timer t larger than 25535(two bytes)!");
+    } else {
+      struct timespec idle = {.tv_sec = 0, .tv_nsec = 1000000};
+      nanosleep(&idle, NULL);
     }
   }
 
