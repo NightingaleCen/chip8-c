@@ -30,6 +30,9 @@ typedef struct Timer {
   bool with_sound;
   atomic_bool is_running;
 
+  SDL_AudioStream *audio_stream;
+  uint32_t audio_phase;
+
   pthread_mutex_t mutex;
   pthread_t thread;
 } Timer;

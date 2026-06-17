@@ -84,6 +84,31 @@ void destroy_display(Display *display) {
 
 /*-----------Timer-----------*/
 
+static void SDLCALL sound_callback(void *userdata, SDL_AudioStream *stream,
+                                   int additional_amount, int total_amount) {
+  (void)total_amount;
+  Timer *timer = userdata;
+  if (additional_amount <= 0) {
+    return;
+  }
+
+  int samples = additional_amount / (int)sizeof(int16_t);
+  int16_t *buf = SDL_stack_alloc(int16_t, samples);
+
+  if (timer->t > 0) {
+    const int period = 48000 / 440;
+    for (int i = 0; i < samples; i++) {
+      buf[i] = ((timer->audio_phase++ % period) < period / 2) ? 8000 : -8000;
+    }
+  } else {
+    SDL_memset(buf, 0, (size_t)additional_amount);
+    timer->audio_phase = 0;
+  }
+
+  SDL_PutAudioStreamData(stream, buf, additional_amount);
+  SDL_stack_free(buf);
+}
+
 Timer *init_timer(bool with_sound) {
   Timer *timer = malloc(sizeof(Timer));
   if (timer == NULL) {
@@ -93,6 +118,21 @@ Timer *init_timer(bool with_sound) {
   timer->t = 0;
   timer->with_sound = with_sound;
   timer->is_running = true;
+  timer->audio_phase = 0;
+
+  if (with_sound) {
+    SDL_AudioSpec spec = {SDL_AUDIO_S16, 1, 48000};
+    timer->audio_stream =
+        SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec,
+                                  sound_callback, timer);
+    if (!timer->audio_stream) {
+      SDL_Log("WARNING: Couldn't open audio device: %s", SDL_GetError());
+    } else {
+      SDL_ResumeAudioStreamDevice(timer->audio_stream);
+    }
+  } else {
+    timer->audio_stream = NULL;
+  }
 
   pthread_mutex_init(&(timer->mutex), NULL);
   pthread_create(&(timer->thread), NULL, update_timer, timer);
@@ -107,9 +147,6 @@ void *update_timer(void *arg) {
 
   while (timer->is_running) {
     if (timer->t > 0 && timer->t <= 0xff) {
-      if (timer->with_sound) {
-        // TODO: some beep here
-      }
       pthread_mutex_lock(&(timer->mutex));
 
       timer->t--;
@@ -142,6 +179,9 @@ void stop_timer(Timer *timer) {
   timer->is_running = false;
   pthread_join(timer->thread, NULL);
   pthread_mutex_destroy(&(timer->mutex));
+  if (timer->audio_stream) {
+    SDL_DestroyAudioStream(timer->audio_stream);
+  }
 }
 
 /*---------Keyboard----------*/

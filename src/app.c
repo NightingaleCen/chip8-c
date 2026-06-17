@@ -24,6 +24,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
   ctx->registers = init_registers();
   ctx->stack = init_stack();
   ctx->display = init_display();
+
+  SDL_InitSubSystem(SDL_INIT_AUDIO);
   ctx->delay_timer = init_timer(TIMER_WITHOUT_SOUND);
   ctx->sound_timer = init_timer(TIMER_WITH_SOUND);
 
